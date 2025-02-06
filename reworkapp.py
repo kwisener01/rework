@@ -13,7 +13,7 @@ st.title("📊 Multi-Tool Data Analysis App")
 tab1, tab2 = st.tabs(["⚙️ Machine Data Analysis", "🔍 Rework Data Analysis"])
 
 # ============================================================
-# 🚀 TAB 1: MACHINE DATA ANALYSIS (With Date Range Selection)
+# 🚀 TAB 1: MACHINE DATA ANALYSIS (With Date Range & Parts Run)
 # ============================================================
 with tab1:
     st.header("⚙️ Machine Data Analysis")
@@ -66,6 +66,9 @@ with tab1:
         # 📌 Calculate hourly averages
         hourly_averages = data.groupby(['Date', 'Hour'])['Time Difference'].mean()
 
+        # 📌 Calculate Parts Run per Hour
+        parts_run_per_hour = data.groupby(['Date', 'Hour']).size()
+
         # 📌 Display summary statistics
         st.subheader("📊 Summary Statistics")
         st.write(f"🔹 **Average Interval:** {timedelta(seconds=avg_interval)} ({avg_interval:.2f} seconds)")
@@ -76,11 +79,25 @@ with tab1:
         st.subheader("⏳ Hourly Averages")
         st.write(hourly_averages)
 
-        # 📌 Option to download hourly averages as CSV
+        # 📌 Display Number of Parts Run Per Hour
+        st.subheader("⚙️ Parts Run Per Hour")
+        st.write(parts_run_per_hour)
+
+        # 📌 Parts Run Per Hour - Bar Chart
+        st.subheader("📊 Parts Run Per Hour (Bar Chart)")
+        fig_parts, ax_parts = plt.subplots(figsize=(10, 5))
+        parts_run_per_hour.unstack().plot(kind='bar', stacked=True, ax=ax_parts, colormap="Blues_r")
+        plt.xlabel("Hour")
+        plt.ylabel("Number of Parts")
+        plt.title("Parts Run Per Hour")
+        plt.xticks(rotation=45)
+        st.pyplot(fig_parts)
+
+        # 📌 Option to download hourly parts run data as CSV
         st.download_button(
-            label="📥 Download Hourly Averages",
-            data=hourly_averages.reset_index().to_csv(index=False),
-            file_name="hourly_averages.csv",
+            label="📥 Download Parts Run Per Hour Data",
+            data=parts_run_per_hour.reset_index().to_csv(index=False),
+            file_name="parts_run_per_hour.csv",
             mime="text/csv"
         )
 
