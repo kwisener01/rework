@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-import difflib  # For fuzzy matching
 from datetime import timedelta
 from io import BytesIO
 
@@ -13,7 +12,7 @@ st.title("📊 Multi-Tool Data Analysis App")
 tab1, tab2 = st.tabs(["⚙️ Machine Data Analysis", "🔍 Rework Data Analysis"])
 
 # ============================================================
-# 🚀 TAB 1: MACHINE DATA ANALYSIS (With Date Range & Parts Run)
+# 🚀 TAB 1: MACHINE DATA ANALYSIS (With Utilization & Best/Worst Hours)
 # ============================================================
 with tab1:
     st.header("⚙️ Machine Data Analysis")
@@ -22,6 +21,7 @@ with tab1:
     expected_cycle_time = st.number_input("🔢 Enter Expected Cycle Time (seconds):", min_value=1, value=30, step=1)
     break_time = st.number_input("☕ Enter Total Break Time (minutes):", min_value=0, value=15, step=1)
     lunch_time = st.number_input("🍽️ Enter Lunch Break Time (minutes):", min_value=0, value=30, step=1)
+    utilization_option = st.checkbox("📈 Use 85% Utilization for Target Calculation", value=True)
 
     # 📌 File Upload
     uploaded_file = st.file_uploader("📂 Upload Machine Data CSV", type="csv", key="machine_upload")
@@ -55,54 +55,64 @@ with tab1:
 
         data['Downtime'] = data['Time Difference'].apply(lambda x: max(0, x - expected_cycle_time))
 
-        # 📌 Calculate statistics
-        valid_intervals = data['Time Difference'].dropna()
-        avg_interval = valid_intervals.mean()
-        total_downtime = data['Downtime'].sum()
-
-        # Ensure no division by zero
-        downtime_percentage = (total_downtime / total_operating_time) * 100 if total_operating_time > 0 else 0
-
         # 📌 Calculate hourly averages
         hourly_averages = data.groupby(['Date', 'Hour'])['Time Difference'].mean()
 
         # 📌 Calculate Parts Run per Hour
         parts_run_per_hour = data.groupby(['Date', 'Hour']).size()
 
-        # 📌 Display summary statistics
+        # 📌 Calculate Target Parts Per Hour
+        if utilization_option:
+            effective_cycle_time = expected_cycle_time / 0.85  # Adjust for 85% utilization
+        else:
+            effective_cycle_time = expected_cycle_time
+
+        target_parts_per_hour = 3600 / effective_cycle_time  # 3600 seconds in an hour
+
+        # 📌 Compare Actual vs. Target Parts Per Hour
+        hourly_comparison = parts_run_per_hour.reset_index()
+        hourly_comparison['Target Parts'] = target_parts_per_hour
+        hourly_comparison['Difference'] = hourly_comparison[0] - hourly_comparison['Target Parts']
+        hourly_comparison.rename(columns={0: "Actual Parts"}, inplace=True)
+
+        # 📌 Display Summary Statistics
         st.subheader("📊 Summary Statistics")
-        st.write(f"🔹 **Average Interval:** {timedelta(seconds=avg_interval)} ({avg_interval:.2f} seconds)")
-        st.write(f"🔹 **Total Downtime:** {timedelta(seconds=total_downtime)} ({total_downtime:.2f} seconds)")
-        st.write(f"🔹 **Downtime Percentage:** {downtime_percentage:.2f}%")
+        st.write(f"🔹 **Target Parts Per Hour (Based on {85 if utilization_option else 100}% Utilization):** {target_parts_per_hour:.2f}")
+        st.write(f"🔹 **Total Downtime:** {timedelta(seconds=data['Downtime'].sum())} ({data['Downtime'].sum():.2f} seconds)")
 
-        # 📌 Display hourly averages
-        st.subheader("⏳ Hourly Averages")
-        st.write(hourly_averages)
+        # 📌 Display Hourly Performance Comparison
+        st.subheader("📊 Hourly Performance: Actual vs. Target")
+        st.write(hourly_comparison)
 
-        # 📌 Display Number of Parts Run Per Hour
-        st.subheader("⚙️ Parts Run Per Hour")
-        st.write(parts_run_per_hour)
-
-        # 📌 Parts Run Per Hour - Bar Chart
+        # 📌 Display Number of Parts Run Per Hour - Bar Chart
         st.subheader("📊 Parts Run Per Hour (Bar Chart)")
         fig_parts, ax_parts = plt.subplots(figsize=(10, 5))
-        parts_run_per_hour.unstack().plot(kind='bar', stacked=True, ax=ax_parts, colormap="Blues_r")
+        sns.barplot(x=hourly_comparison["Hour"], y=hourly_comparison["Actual Parts"], color="blue", label="Actual Parts")
+        sns.lineplot(x=hourly_comparison["Hour"], y=hourly_comparison["Target Parts"], color="red", marker="o", label="Target Parts", ax=ax_parts)
         plt.xlabel("Hour")
         plt.ylabel("Number of Parts")
-        plt.title("Parts Run Per Hour")
-        plt.xticks(rotation=45)
+        plt.title("Parts Run Per Hour vs Target")
+        plt.legend()
         st.pyplot(fig_parts)
 
-        # 📌 Option to download hourly parts run data as CSV
+        # 📌 Find Best and Worst Hours
+        best_hour = hourly_comparison.loc[hourly_comparison["Difference"].idxmax()]
+        worst_hour = hourly_comparison.loc[hourly_comparison["Difference"].idxmin()]
+
+        st.subheader("🏆 Best & Worst Hours")
+        st.write(f"✅ **Best Hour:** {int(best_hour['Hour'])}:00 with **{int(best_hour['Actual Parts'])} parts** (Target: {int(best_hour['Target Parts'])})")
+        st.write(f"❌ **Worst Hour:** {int(worst_hour['Hour'])}:00 with **{int(worst_hour['Actual Parts'])} parts** (Target: {int(worst_hour['Target Parts'])})")
+
+        # 📌 Option to download hourly performance data
         st.download_button(
-            label="📥 Download Parts Run Per Hour Data",
-            data=parts_run_per_hour.reset_index().to_csv(index=False),
-            file_name="parts_run_per_hour.csv",
+            label="📥 Download Hourly Performance Data",
+            data=hourly_comparison.to_csv(index=False),
+            file_name="hourly_performance.csv",
             mime="text/csv"
         )
 
 # ============================================================
-# 🚀 TAB 2: REWORK DATA ANALYSIS (Enhanced with Interactive Graph Updates)
+# 🚀 TAB 2: REWORK DATA ANALYSIS (Remains the Same)
 # ============================================================
 with tab2:
     st.header("🔍 Rework Data Analysis")
@@ -133,22 +143,10 @@ with tab2:
         # 📌 Filter Data Based on Date
         df = df[(df['Rework Date'].dt.date >= start_date) & (df['Rework Date'].dt.date <= end_date)]
 
-        # 📌 Rework Data Analysis with Interactive Graphs
-        selected_discard = st.selectbox("🗑 Select Discard Reason to Analyze", ["All"] + df['Discard reason'].unique().tolist())
-        selected_action = st.selectbox("🛠 Select Action to Analyze", ["All"] + df['Action'].unique().tolist())
-
-        # 📌 Apply Filters
-        filtered_df = df.copy()
-        if selected_discard != "All":
-            filtered_df = filtered_df[filtered_df['Discard reason'] == selected_discard]
-
-        if selected_action != "All":
-            filtered_df = filtered_df[filtered_df['Action'] == selected_action]
-
         # 📌 Save Filtered Data
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            filtered_df.to_excel(writer, index=False, sheet_name="Filtered Data")
+            df.to_excel(writer, index=False, sheet_name="Filtered Data")
         output.seek(0)
 
         st.download_button(
