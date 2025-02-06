@@ -77,7 +77,7 @@ with tab1:
         )
 
 # ============================================================
-# 🚀 TAB 2: REWORK DATA ANALYSIS (Now with Action & Discard Filters)
+# 🚀 TAB 2: REWORK DATA ANALYSIS (With Date & Model Selection)
 # ============================================================
 with tab2:
     st.header("🔍 Rework Data Analysis")
@@ -91,47 +91,97 @@ with tab2:
         # 📌 Clean Column Names
         df.columns = df.columns.str.strip()
 
-        # 📌 Standardize NG Part and NG Detail text
+        # 📌 Standardize Text Fields
         df['NG Part'] = df['NG Part'].astype(str).str.strip().str.upper()
         df['NG Detail'] = df['NG Detail'].astype(str).str.strip().str.upper()
         df['NG Description'] = df['NG Description'].fillna("Unknown")
+        df['Action'] = df['Action'].fillna("Unknown")
+        df['Discard reason'] = df['Discard reason'].fillna("Unknown")
+        df['Model'] = df['Model'].fillna("Unknown")
 
-        # 📌 Convert dates to datetime
+        # 📌 Convert Date Column
         df['Rework Date'] = pd.to_datetime(df['Rework Date'], errors='coerce')
 
-        # 📌 Action Filter
-        selected_action = st.selectbox("🎯 Select an Action to Analyze Discard Reasons", ["All"] + df['Action'].dropna().unique().tolist())
-        selected_discard = st.selectbox("🗑 Select a Discard Reason to Analyze Actions", ["All"] + df['Discard reason'].dropna().unique().tolist())
+        # 📌 Date Range Selector
+        min_date = df['Rework Date'].min().date()
+        max_date = df['Rework Date'].max().date()
+        start_date, end_date = st.date_input("📅 Select Date Range", [min_date, max_date])
 
-        # 📌 Filter Data Based on User Selection
+        # 📌 Filter Data Based on Date
+        df = df[(df['Rework Date'].dt.date >= start_date) & (df['Rework Date'].dt.date <= end_date)]
+
+        # 📌 Pareto Analysis - Discard Reason
+        st.subheader("🗑️ Pareto Chart of Discard Reasons")
+        discard_counts = df['Discard reason'].value_counts()
+        cumulative_percentage = discard_counts.cumsum() / discard_counts.sum() * 100
+
+        fig_discard, ax1 = plt.subplots(figsize=(10, 6))
+        ax1.bar(discard_counts.index[:10], discard_counts.values[:10], color='red', alpha=0.7)
+        ax1.set_ylabel('Frequency', color='red')
+        ax1.set_xticklabels(discard_counts.index[:10], rotation=45, ha='right')
+
+        ax2 = ax1.twinx()
+        ax2.plot(discard_counts.index[:10], cumulative_percentage[:10], color='black', marker='o', linestyle='dashed')
+        ax2.set_ylabel('Cumulative Percentage', color='black')
+        ax2.axhline(y=80, color='gray', linestyle='dotted')
+
+        plt.title('Pareto Chart of Top 10 Discard Reasons')
+        st.pyplot(fig_discard)
+
+        # 📌 Pareto Analysis - Action
+        st.subheader("🛠 Pareto Chart of Actions Taken")
+        action_counts = df['Action'].value_counts()
+        cumulative_percentage = action_counts.cumsum() / action_counts.sum() * 100
+
+        fig_action, ax3 = plt.subplots(figsize=(10, 6))
+        ax3.bar(action_counts.index[:10], action_counts.values[:10], color='blue', alpha=0.7)
+        ax3.set_ylabel('Frequency', color='blue')
+        ax3.set_xticklabels(action_counts.index[:10], rotation=45, ha='right')
+
+        ax4 = ax3.twinx()
+        ax4.plot(action_counts.index[:10], cumulative_percentage[:10], color='black', marker='o', linestyle='dashed')
+        ax4.set_ylabel('Cumulative Percentage', color='black')
+        ax4.axhline(y=80, color='gray', linestyle='dotted')
+
+        plt.title('Pareto Chart of Top 10 Actions Taken')
+        st.pyplot(fig_action)
+
+        # 📌 Dropdown Filters
+        selected_discard = st.selectbox("🗑 Select Discard Reason to Analyze", ["All"] + df['Discard reason'].unique().tolist())
+        selected_action = st.selectbox("🛠 Select Action to Analyze", ["All"] + df['Action'].unique().tolist())
+
+        # 📌 Apply Filters
         filtered_df = df.copy()
-        if selected_action != "All":
-            filtered_df = filtered_df[filtered_df['Action'] == selected_action]
-
         if selected_discard != "All":
             filtered_df = filtered_df[filtered_df['Discard reason'] == selected_discard]
 
-        # 📌 Show Breakdown of Discard Reasons for Selected Action
         if selected_action != "All":
-            st.subheader(f"🗑 Discard Reasons for Action: {selected_action}")
-            discard_counts = filtered_df['Discard reason'].value_counts().head(10)
-            fig_discard, ax_discard = plt.subplots(figsize=(8, 5))
-            sns.barplot(x=discard_counts.values, y=discard_counts.index, palette="Reds_r")
-            plt.xlabel("Count")
-            plt.ylabel("Discard Reason")
-            plt.title(f"Top Discard Reasons for {selected_action}")
-            st.pyplot(fig_discard)
+            filtered_df = filtered_df[filtered_df['Action'] == selected_action]
 
-        # 📌 Show Breakdown of Actions for Selected Discard Reason
-        if selected_discard != "All":
-            st.subheader(f"🛠 Actions Taken for Discard Reason: {selected_discard}")
-            action_counts = filtered_df['Action'].value_counts().head(10)
-            fig_action, ax_action = plt.subplots(figsize=(8, 5))
-            sns.barplot(x=action_counts.values, y=action_counts.index, palette="Blues_r")
-            plt.xlabel("Count")
-            plt.ylabel("Action Taken")
-            plt.title(f"Top Actions for {selected_discard}")
-            st.pyplot(fig_action)
+        # 📌 Show Model Breakdown
+        st.subheader("🚗 Breakdown of Models Affected")
+        model_counts = filtered_df['Model'].value_counts().head(10)
+
+        fig_model, ax_model = plt.subplots(figsize=(8, 5))
+        sns.barplot(x=model_counts.values, y=model_counts.index, palette="Purples_r")
+        plt.xlabel("Count")
+        plt.ylabel("Model")
+        plt.title("Top 10 Affected Models")
+        st.pyplot(fig_model)
+
+        # 📌 Trends Over Time
+        st.subheader("📈 Trends Over Time")
+        filtered_df['Rework Day'] = filtered_df['Rework Date'].dt.date
+        daily_trends = filtered_df.groupby('Rework Day').size()
+
+        fig_trend, ax_trend = plt.subplots(figsize=(10, 5))
+        sns.lineplot(x=daily_trends.index, y=daily_trends.values, marker='o', linestyle='-')
+        plt.xticks(rotation=45)
+        plt.xlabel("Date")
+        plt.ylabel("Number of Defects")
+        plt.title("Trends of Rework Over Time")
+        plt.grid()
+        st.pyplot(fig_trend)
 
         # 📌 Save Filtered Data
         output = BytesIO()
