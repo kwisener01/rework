@@ -77,7 +77,7 @@ with tab1:
         )
 
 # ============================================================
-# 🚀 TAB 2: REWORK DATA ANALYSIS (With Date Range Filter)
+# 🚀 TAB 2: REWORK DATA ANALYSIS (Now with Action & Discard Filters)
 # ============================================================
 with tab2:
     st.header("🔍 Rework Data Analysis")
@@ -99,43 +99,49 @@ with tab2:
         # 📌 Convert dates to datetime
         df['Rework Date'] = pd.to_datetime(df['Rework Date'], errors='coerce')
 
-        # 📌 Date Range Selector
-        min_date = df['Rework Date'].min().date()
-        max_date = df['Rework Date'].max().date()
-        start_date, end_date = st.date_input("📅 Select Date Range", [min_date, max_date])
+        # 📌 Action Filter
+        selected_action = st.selectbox("🎯 Select an Action to Analyze Discard Reasons", ["All"] + df['Action'].dropna().unique().tolist())
+        selected_discard = st.selectbox("🗑 Select a Discard Reason to Analyze Actions", ["All"] + df['Discard reason'].dropna().unique().tolist())
 
-        # 📌 Filter data based on selected date range
-        df = df[(df['Rework Date'].dt.date >= start_date) & (df['Rework Date'].dt.date <= end_date)]
+        # 📌 Filter Data Based on User Selection
+        filtered_df = df.copy()
+        if selected_action != "All":
+            filtered_df = filtered_df[filtered_df['Action'] == selected_action]
 
-        # 📌 Analysis on "Action" Column
-        st.subheader("🛠 Most Common Actions Taken")
-        action_counts = df['Action'].value_counts().head(10)  # Top 10 actions
-        fig_action, ax_action = plt.subplots(figsize=(8, 5))
-        sns.barplot(x=action_counts.values, y=action_counts.index, palette="Blues_r")
-        plt.xlabel("Count")
-        plt.ylabel("Action Taken")
-        plt.title("Top 10 Actions in Rework Process")
-        st.pyplot(fig_action)
+        if selected_discard != "All":
+            filtered_df = filtered_df[filtered_df['Discard reason'] == selected_discard]
 
-        # 📌 Analysis on "Discard Reason" Column
-        st.subheader("🗑️ Most Common Discard Reasons")
-        discard_counts = df['Discard reason'].value_counts().head(10)  # Top 10 discard reasons
-        fig_discard, ax_discard = plt.subplots(figsize=(8, 5))
-        sns.barplot(x=discard_counts.values, y=discard_counts.index, palette="Reds_r")
-        plt.xlabel("Count")
-        plt.ylabel("Discard Reason")
-        plt.title("Top 10 Reasons for Discarding Parts")
-        st.pyplot(fig_discard)
+        # 📌 Show Breakdown of Discard Reasons for Selected Action
+        if selected_action != "All":
+            st.subheader(f"🗑 Discard Reasons for Action: {selected_action}")
+            discard_counts = filtered_df['Discard reason'].value_counts().head(10)
+            fig_discard, ax_discard = plt.subplots(figsize=(8, 5))
+            sns.barplot(x=discard_counts.values, y=discard_counts.index, palette="Reds_r")
+            plt.xlabel("Count")
+            plt.ylabel("Discard Reason")
+            plt.title(f"Top Discard Reasons for {selected_action}")
+            st.pyplot(fig_discard)
 
-        # 📌 Save Cleaned Data
+        # 📌 Show Breakdown of Actions for Selected Discard Reason
+        if selected_discard != "All":
+            st.subheader(f"🛠 Actions Taken for Discard Reason: {selected_discard}")
+            action_counts = filtered_df['Action'].value_counts().head(10)
+            fig_action, ax_action = plt.subplots(figsize=(8, 5))
+            sns.barplot(x=action_counts.values, y=action_counts.index, palette="Blues_r")
+            plt.xlabel("Count")
+            plt.ylabel("Action Taken")
+            plt.title(f"Top Actions for {selected_discard}")
+            st.pyplot(fig_action)
+
+        # 📌 Save Filtered Data
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df.to_excel(writer, index=False, sheet_name="Cleaned Data")
+            filtered_df.to_excel(writer, index=False, sheet_name="Filtered Data")
         output.seek(0)
 
         st.download_button(
-            label="📥 Download Cleaned Rework Data (Excel)",
+            label="📥 Download Filtered Data (Excel)",
             data=output,
-            file_name="Cleaned_Rework_Data.xlsx",
+            file_name="Filtered_Rework_Data.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
