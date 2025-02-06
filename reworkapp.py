@@ -77,7 +77,7 @@ with tab1:
         )
 
 # ============================================================
-# 🚀 TAB 2: REWORK DATA ANALYSIS (Updated with Actions & Discard Reasons)
+# 🚀 TAB 2: REWORK DATA ANALYSIS (With Date Range Filter)
 # ============================================================
 with tab2:
     st.header("🔍 Rework Data Analysis")
@@ -99,20 +99,13 @@ with tab2:
         # 📌 Convert dates to datetime
         df['Rework Date'] = pd.to_datetime(df['Rework Date'], errors='coerce')
 
-        # 📌 Fix Typos in NG Description
-        def fix_typos(column, threshold=0.8):
-            """Auto-correct similar defect names using fuzzy matching."""
-            unique_names = df[column].dropna().unique()
-            corrected_names = {}
-            for name in unique_names:
-                match = difflib.get_close_matches(name, corrected_names.keys(), n=1, cutoff=threshold)
-                if match:
-                    corrected_names[name] = match[0]
-                else:
-                    corrected_names[name] = name
-            df[column] = df[column].replace(corrected_names)
+        # 📌 Date Range Selector
+        min_date = df['Rework Date'].min().date()
+        max_date = df['Rework Date'].max().date()
+        start_date, end_date = st.date_input("📅 Select Date Range", [min_date, max_date])
 
-        fix_typos('NG Description')
+        # 📌 Filter data based on selected date range
+        df = df[(df['Rework Date'].dt.date >= start_date) & (df['Rework Date'].dt.date <= end_date)]
 
         # 📌 Analysis on "Action" Column
         st.subheader("🛠 Most Common Actions Taken")
