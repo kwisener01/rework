@@ -12,7 +12,7 @@ st.title("📊 Multi-Tool Data Analysis App")
 tab1, tab2 = st.tabs(["⚙️ Machine Data Analysis", "🔍 Rework Data Analysis"])
 
 # ============================================================
-# 🚀 TAB 1: MACHINE DATA ANALYSIS (With Utilization & Best/Worst Hours)
+# 🚀 TAB 1: MACHINE DATA ANALYSIS (With More Statistics)
 # ============================================================
 with tab1:
     st.header("⚙️ Machine Data Analysis")
@@ -51,12 +51,15 @@ with tab1:
             # 📌 Filter Data Based on Selected Date Range
             data = data[(data['Inspection Date'].dt.date >= start_date) & (data['Inspection Date'].dt.date <= end_date)]
 
-            # 📌 Calculate Parts Run per Hour
-            parts_run_per_hour = data.groupby(['Date', 'Hour']).size() if not data.empty else pd.Series()
-
             if data.empty:
                 st.warning("⚠️ No data available for the selected date range.")
             else:
+                # 📌 Calculate Total Parts Produced
+                total_parts_produced = len(data)
+
+                # 📌 Calculate Parts Run per Hour
+                parts_run_per_hour = data.groupby(['Date', 'Hour']).size()
+
                 # 📌 Calculate Target Parts Per Hour based on Utilization
                 effective_cycle_time = expected_cycle_time / (utilization / 100)
                 target_parts_per_hour = 3600 / effective_cycle_time  # 3600 seconds in an hour
@@ -67,14 +70,33 @@ with tab1:
                 hourly_comparison['Target Parts'] = target_parts_per_hour
                 hourly_comparison['Difference'] = hourly_comparison["Actual Parts"] - hourly_comparison["Target Parts"]
 
+                # 📌 Calculate Total Operating Time (excluding breaks & lunch)
+                total_operating_time_hours = ((data['Inspection Date'].max() - data['Inspection Date'].min()).total_seconds() / 3600) - ((break_time + lunch_time) / 60)
+
+                # 📌 Calculate Overall Average Parts Per Hour
+                average_parts_per_hour = total_parts_produced / total_operating_time_hours if total_operating_time_hours > 0 else 0
+
+                # 📌 Calculate Actual Utilization %
+                actual_utilization = (average_parts_per_hour / target_parts_per_hour) * 100 if target_parts_per_hour > 0 else 0
+
                 # 📌 Display Summary
                 st.subheader("📊 Summary Statistics")
-                st.write(f"🔹 **Selected Utilization:** {utilization}%")
+                st.write(f"🔹 **Total Parts Produced:** {total_parts_produced}")
+                st.write(f"🔹 **Total Operating Hours (Excluding Breaks & Lunch):** {total_operating_time_hours:.2f} hrs")
+                st.write(f"🔹 **Overall Average Parts Per Hour:** {average_parts_per_hour:.2f}")
                 st.write(f"🔹 **Target Parts Per Hour:** {target_parts_per_hour:.2f}")
+                st.write(f"🔹 **Actual Utilization Percentage:** {actual_utilization:.2f}%")
 
-                # 📌 Display Hourly Performance
-                st.subheader("📊 Hourly Performance: Actual vs. Target")
-                st.write(hourly_comparison)
+                # 📌 Plot Trend of Parts Run Over Time
+                st.subheader("📈 Parts Run Over Time")
+                fig_trend, ax_trend = plt.subplots(figsize=(10, 5))
+                sns.lineplot(x=hourly_comparison["Hour"], y=hourly_comparison["Actual Parts"], marker='o', label="Actual Parts")
+                sns.lineplot(x=hourly_comparison["Hour"], y=hourly_comparison["Target Parts"], marker='o', label="Target Parts", color="red")
+                plt.xlabel("Hour")
+                plt.ylabel("Parts Run")
+                plt.title("Trend of Parts Run Over Time")
+                plt.legend()
+                st.pyplot(fig_trend)
 
                 # 📌 Best & Worst Hours
                 best_hour = hourly_comparison.loc[hourly_comparison["Difference"].idxmax()]
